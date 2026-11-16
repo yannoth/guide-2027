@@ -22,21 +22,29 @@ const TALLY_URL = "";
 
   /* ---------- Paiement / alerte ---------- */
   // Transmet les UTM de la page vers le Payment Link Stripe, et un client_reference_id compact.
+  // Stripe n'accepte dans client_reference_id que [A-Za-z0-9_-] (200 car. max) :
+  // format retenu « {utm_source}_{utm_medium} » (ex. youtube_short, tiktok_bio), « {utm_source} » sans medium,
+  // « direct » sans utm_source.
+  function refPart(v) {
+    return String(v || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60).replace(/_+$/, "");
+  }
+  function clientReferenceId(params) {
+    var src = refPart(params.get("utm_source"));
+    var med = refPart(params.get("utm_medium"));
+    if (!src) return "direct";
+    return (med ? src + "_" + med : src).slice(0, 200);
+  }
   function paymentUrlWithUtm(base) {
     try {
       var out = new URL(base);
       var params = new URLSearchParams(window.location.search);
       var keys = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
-      var parts = [];
       keys.forEach(function (k) {
         var v = params.get(k);
-        if (v) {
-          out.searchParams.set(k, v);
-          parts.push(k.replace("utm_", "") + ":" + v);
-        }
+        if (v) out.searchParams.set(k, v);
       });
-      if (parts.length && !out.searchParams.has("client_reference_id")) {
-        out.searchParams.set("client_reference_id", parts.join("|").slice(0, 200));
+      if (!out.searchParams.has("client_reference_id")) {
+        out.searchParams.set("client_reference_id", clientReferenceId(params));
       }
       return out.toString();
     } catch (err) {
